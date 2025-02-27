@@ -53,6 +53,8 @@ void zgt_tm::openlog(string lfile)
 #endif
 }
 
+
+//Needs to be implemented. This function will begin a new transaction with 'Txid'
 int zgt_tm::BeginTx(long tid, int thrNum, char type)
  {
  
@@ -84,6 +86,8 @@ int zgt_tm::BeginTx(long tid, int thrNum, char type)
 
  }     
 
+
+//This function will read the object that we begun with BeginTx
 int zgt_tm::TxRead(long tid, long obno, int thrNum)
  {
  //again set the txmgr semaphore first. create a thread and first check 
@@ -118,6 +122,8 @@ int zgt_tm::TxRead(long tid, long obno, int thrNum)
    return(0);   //successful operation
  }
 
+
+//This function will write the transaction we begun, and read onto the disk. 
 int zgt_tm::TxWrite(long tid, long obno, int thrNum)
  {
   //call the write function (writetx); same as above
@@ -127,6 +133,10 @@ int zgt_tm::TxWrite(long tid, long obno, int thrNum)
    return(0);  // successful operation
  }
 
+
+
+//This function commits the changes we made onto the function in TxWrite()
+// to the disk, making it permanent
 int zgt_tm::CommitTx(long tid, int thrNum)
  {
    
@@ -135,6 +145,10 @@ int zgt_tm::CommitTx(long tid, int thrNum)
 
  }
  
+
+//This function aborts a transaction that started.
+// By aborting it means deleting any changes we made after starting
+// the transaction and returning it to before the transaciton that aborted started
 int zgt_tm::AbortTx(long tid, int thrNum)
  {       
     //write your code
