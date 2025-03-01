@@ -113,7 +113,7 @@ if (! inFile.is_open())
      // Passing the Txtype to get the transaction type.
        strcpy(temp,tokens[2].c_str());
        Txtype = temp[0];
-	 printf("BeginTx : %d\n\n", tid);
+	 printf("BeginTx : %ld\n\n", tid);
 	 printf("TxType : %c\n\n", Txtype);
 	 if ((op=ZGT_Sh->BeginTx(tid, thrNum++,Txtype))<0)
 	   cout << "\nerro from:" << tokens[0] <<" for TID:" << tid << "\n";

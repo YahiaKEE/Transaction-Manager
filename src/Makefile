@@ -13,7 +13,7 @@ MAIN=zgt_test
 #solutions dir should have src, includes, and test-files directories
 #change with your path if you are not using omega.uta.edu
 
-TXMGR= ..
+TXMGR= /workspaces/Transaction-Manager
 
 
 
@@ -25,7 +25,7 @@ CC=$(DIRPATH)/bin/g++
 #DEBUGFLAGS =  -DTX_DEBUG # -DTM_DEBUG -DHT_DEBUG
 
 #Below, all are enabled; you can disable it as you wish
-DEBUGFLAGS = -DTX_DEBUG -DTM_DEBUG -DHT_DEBUG
+#DEBUGFLAGS = -DTX_DEBUG -DTM_DEBUG -DHT_DEBUG
 
 INCLUDES = -I${TXMGR}/include -I.
 

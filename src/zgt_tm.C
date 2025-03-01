@@ -1,7 +1,5 @@
 /* the Tx mgr functions are implemented here */
 
-/* Spring 2025: CSE 4331/5331 Project 2 : Tx Manager */
-
 #include <stdio.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -13,57 +11,53 @@
 #include "zgt_tm.h"
 #include "zgt_extern.h"
 
-#define TEAM_NO      6     //insert your team number here
- 
+#define TEAM_NO 21    //insert your team number here
 
-// Modified to fix handling with 'end all' as last input
-
-// Initializing the Txtype in BeginTx while in ReadTx, WriteTx, AbortTx, CommitTx it is initialized to null(' ')
-
-// Sets the value of member function logfile and opens the file for writing in the append mode
-
+//Sets the value of member function logfile and opens the file for writing
+//in the append mode
 void zgt_tm::openlog(string lfile)
 {
-//FILE *outfile;  not needed; changed to logfile for uniformity
 #ifdef TM_DEBUG
-  printf("entering openlog\n");fflush(stdout);
+  printf("entering openlog\n"); fflush(stdout);
 #endif
-  this->logfilename = (char *) malloc(sizeof(char) * MAX_FILENAME);
-    int i=0;
- while(lfile[i] !='\0')
-  {
-   this->logfilename[i] = lfile[i];
-   i++;
-  } 
-// ASantra [2/07/2025]: Commented out to properly name logfiles
-// logfilename[--i] = '\0';
+
+  // Allocate memory for log file name
+  logfilename = (char *) malloc(sizeof(char) * MAX_FILENAME);
+  int i = 0;
+  while (lfile[i] != '\0') {
+    logfilename[i] = lfile[i];
+    i++;
+  }
+  logfilename[i] = '\0';  // Ensure null termination
+
 #ifdef TM_DEBUG
-  printf("\nGiven log file name: %s\n", logfile);fflush(stdout);
+  printf("\nGiven log file name: %s\n", logfilename); fflush(stdout);
 #endif
- if ((this->logfile = fopen(this->logfilename, "w")) == NULL){
-   printf("\nCannot open log file for write/append:%s\n", logfilename);fflush(stdout);
-   exit(1);
- }
- fprintf(this->logfile, "---------------------------------------------------------------------------\n");
- fprintf(this->logfile, "TxId\tTxtype\tOperation\tObId:Obvalue:optime\tLockType\tStatus\t\tTxStatus\n");
- fflush(this->logfile);
+
+  // Open log file using logfilename
+  if ((logfile = fopen(logfilename, "a")) == NULL) {
+    printf("\nCannot open log file for append: %s\n", logfilename); fflush(stdout);
+    exit(1);
+  }
+
+  fprintf(logfile, "---------------------------------------------------------------\n");
+  fprintf(logfile, "TxId\tTxtype\tOperation\tObId:Obvalue:optime\tLockType\tStatus\t\tTxStatus\n");
+  fflush(logfile);
+
 #ifdef TM_DEBUG
- printf("leaving openlog\n");fflush(stdout);
- fflush(stdout);
+  printf("leaving openlog\n"); fflush(stdout);
 #endif
 }
 
 
-//Needs to be implemented. This function will begin a new transaction with 'Txid'
-int zgt_tm::BeginTx(long tid, int thrNum, char type)
- {
- 
 //create a thread and call the constructor of transaction to
 //create the object and intialize the other members of zgt_tx in
-//begintx(void *thdarg) .Pass the thread arguments in a structure.   
+//begintx(void *thdarg). Pass the thread arguments in a structure
+
+int zgt_tm::BeginTx(long tid, int thrNum, char type){
 
 #ifdef TM_DEBUG
-   printf("\ncreating BeginTx thread for Tx: %d\n", tid);
+   printf("\nentering BeginTx\n");
    fflush(stdout);
 #endif
    struct param *nodeinfo = (struct param*)malloc(sizeof(struct param));
@@ -79,87 +73,138 @@ int zgt_tm::BeginTx(long tid, int thrNum, char type)
      exit(-1);
    }
 #ifdef TM_DEBUG
-   printf("\nfinished creating BeginTx thread for Tx: %d\n", tid);
+   printf("\nleaving BeginTx\n");
    fflush(stdout);
 #endif
    return(0);
 
- }     
+ }
 
+// Call the read function in transaction class. Read operation is just printing
+// the value of the item; But to perform the operation, one needs to make sure
+// that the strict 2-phase locking is followed.
+// now create the thread and call the method readtx(void *)
 
-//This function will read the object that we begun with BeginTx
 int zgt_tm::TxRead(long tid, long obno, int thrNum)
  {
- //again set the txmgr semaphore first. create a thread and first check 
-   // whether this thread can proceed based on the condition variable for that thread.
-   // This is to prevent 2 operations of the same Tx follow one another.
-   // Then get the lock and perform the read operation.
-   //  Call the read function in transaction. 
-   //now create the thread and call the method readtx(void *)
-   
+
 #ifdef TM_DEBUG
-   printf("\ncreating TxRead thread for Tx: %d\n", tid);fflush(stdout);
+   printf("\nentering TxRead\n");fflush(stdout);
    fflush(stdout);
 #endif
    pthread_t thread1;
-   
+
    struct param *nodeinfo = (struct param*)malloc(sizeof(struct param));
    nodeinfo->tid = tid;
    nodeinfo->obno = obno;
    nodeinfo->Txtype = ' ';
-   nodeinfo->count = --SEQNUM[tid];
+   nodeinfo->count = --SEQNUM[tid]; // To the sequence of action on the txn tid
    int status;
    status = pthread_create(&threadid[thrNum],NULL,readtx,(void*)nodeinfo);
    if (status){
      printf("ERROR: return code from pthread_create() is:%d\n", status);
      exit(-1);
    }
-   
+
 #ifdef TM_DEBUG
-   printf("\nexiting TxRead thread create for Tx: %d\n", tid);
+   printf("\nleaving TxRead\n");
    fflush(stdout);
 #endif
    return(0);   //successful operation
  }
 
-
-//This function will write the transaction we begun, and read onto the disk. 
+// write operation is to increement the value by 1. Again the protocol
+// need to be adheared to
 int zgt_tm::TxWrite(long tid, long obno, int thrNum)
  {
-  //call the write function (writetx); same as above
+	//write your code
+#ifdef TM_DEBUG
+   printf("\nentering WriteTx\n");
+   fflush(stdout);
+#endif
+  pthread_t thread1;
+  struct param *nodeinfo = (struct param*)malloc(sizeof(struct param));
+   nodeinfo->tid = tid;
+   nodeinfo->obno = obno;
+   nodeinfo->Txtype = ' ';
+   nodeinfo->count = --SEQNUM[tid];   // To the sequence of action on the txn tid
 
-    // write your code
-    
-   return(0);  // successful operation
+   int status;
+   status = pthread_create(&threadid[thrNum],NULL,writetx,(void*)nodeinfo);
+   if (status){
+     printf("ERROR: return code from pthread_create() is:%d\n", status);
+     exit(-1);
+   }
+
+#ifdef TM_DEBUG
+   printf("\nleaving WriteTx\n");
+   fflush(stdout);
+#endif
+   return(0);
  }
 
-
-
-//This function commits the changes we made onto the function in TxWrite()
-// to the disk, making it permanent
 int zgt_tm::CommitTx(long tid, int thrNum)
  {
-   
-    //write your code
-   return(0); //successful operation
+	//write your code
+  #ifdef TM_DEBUG
+   printf("\nEntering CommitTx with %d\n",tid);
+   fflush(stdout);
+  #endif
+   pthread_t thread1;
+   struct param *nodeinfo = (struct param*)malloc(sizeof(struct param));
+   nodeinfo->tid = tid;
+   //nodeinfo->obno = obno; -i/p- commit 1
+   nodeinfo->Txtype = ' ';
+   nodeinfo->count = --SEQNUM[tid];
 
+   int status;
+   status = pthread_create(&threadid[thrNum],NULL,committx,(void*)nodeinfo);
+   if (status){
+     printf("ERROR: return code from pthread_create() is:%d\n", status);
+     exit(-1);
+   }
+
+  #ifdef TM_DEBUG
+     printf("\nleaving CommitTx\n");
+     fflush(stdout);
+  #endif
+   return(0);
  }
- 
 
-//This function aborts a transaction that started.
-// By aborting it means deleting any changes we made after starting
-// the transaction and returning it to before the transaciton that aborted started
 int zgt_tm::AbortTx(long tid, int thrNum)
- {       
-    //write your code
-   return(0);  //successful operation
- }
+ {
+  //write your code
+  #ifdef TM_DEBUG
+   printf("\nentering AbortTx\n");
+   fflush(stdout);
+#endif
+   pthread_t thread1;
+   struct param *nodeinfo = (struct param*)malloc(sizeof(struct param));
+   nodeinfo->tid = tid;
+   nodeinfo->Txtype = ' ';
+   nodeinfo->count = --SEQNUM[tid];
 
+   int status;
+   status = pthread_create(&threadid[thrNum],NULL,aborttx,(void*)nodeinfo);
+   if (status){
+     printf("ERROR: return code from pthread_create() is:%d\n", status);
+     exit(-1);
+   }
+
+#ifdef TM_DEBUG
+   printf("\nleaving AbortTx\n");
+   fflush(stdout);
+#endif
+   return(0); }
+
+
+//currently not used
 int zgt_tm::endTm(int thrNum){
     int rc=0;
     int i;
 #ifdef TM_DEBUG
-   printf("\nEntering End of schedule thread with thrNum: %d\n", thrNum);
+
+   printf("\nentering End of schedule with thrNum: %d\n", thrNum);
    fflush(stdout);
 #endif
    printf("Wait for threads and cleanup\n");
@@ -169,7 +214,6 @@ int zgt_tm::endTm(int thrNum){
     fflush(stdout);
   }
   printf("ALL threads finished their work\n");
-  fflush(stdout);
   printf("Releasing mutexes and condpool\n");
   fflush(stdout);
   //release condpool and mutexpool
@@ -183,25 +227,18 @@ int zgt_tm::endTm(int thrNum){
   printf("endTm completed\n");
   fflush(stdout);
 #ifdef TM_DEBUG
-   printf("\nFinished end of schedule thread: endTm\n");
+   printf("\nleaving endTm\n");
    fflush(stdout);
 #endif
-    fclose(this->logfile);
    return(0); //successful operation
 
  }
- 
-// Not used for project 2 in Spring 2025
 
-//This routine should detect a deadlock and print the cycles involved in the deadlock to 
-//output  and log. In order to do that, spawn a thread that acquires the tm lock and 
-//constructs the wait for graph. You can use the data structure given in ddlock.h or 
-//modify it suitably 
-
+// Currently not used
 int zgt_tm::ddlockDet()
- {       
+ {
 #ifdef TM_DEBUG
-   printf("\ncreating ddlockDet thread\n");
+   printf("\nentering ddlockDet\n");
    fflush(stdout);
 #endif
 
@@ -213,23 +250,18 @@ int zgt_tm::ddlockDet()
    //exit(-1);
    //}
 #ifdef TM_DEBUG
-   printf("\nleaving ddlockDet thread create\n");
+   printf("\nleaving ddlockDet\n");
    fflush(stdout);
 #endif
    return(0);  //successful operation
  }
- 
-// Not used for project 2 in Spring 2025
 
-//This routine should detect a deadlock and print the cycles involved in the deadlock to 
-//output  and log. In order to do that, spawn a thread that acquires the tm lock and 
-//constructs the wait for graph. You can use the data structure given in ddlock.h or 
-//modify it suitably 
+// Currently not used
 
 int zgt_tm::chooseVictim()
- {       
+ {
 #ifdef TM_DEBUG
-   printf("\ncreating chooseVictim thread\n");
+   printf("\nentering chooseVictim\n");
    fflush(stdout);
 #endif
 
@@ -241,20 +273,15 @@ int zgt_tm::chooseVictim()
    //exit(-1);
    //}
 #ifdef TM_DEBUG
-   printf("\nleaving chooseVictim creating thread\n");
+   printf("\nleaving chooseVictim\n");
    fflush(stdout);
 #endif
    return(0);  //successful operation
  }
 
-//important; understand this
+
 zgt_tm::zgt_tm()
 {
-
-#ifdef TM_DEBUG
-   printf("\nInitializing the TM\n");
-   fflush(stdout);
-#endif
   int i,init;
 
    lastr = NULL;
@@ -263,21 +290,17 @@ zgt_tm::zgt_tm()
     objarray[i] = new item(0);  //all init'd to zero
 
   //initialize optime for the thread to sleep;
-  //get a int from random function to sleep 
+  //get a int from random function to sleep
 
-  int seed = 7919; //prime num   
-  srand(seed);  /*initialize random number generator*/ 
-  int M = 1000ll;  /* Multiplier */ 
-  for(i=1; i<MAX_TRANSACTIONS+1; ++i) 
-    { 
+  int seed = 10000;
+  srand(seed);  /*initialize random number generator*/
+  int M = 1000;  /* Multiplier */
+  for(i=1; i<MAX_TRANSACTIONS+1; ++i)
+    {
       double r = ( (double)rand() / (double)(RAND_MAX+1.0) ); //RAND_MAX is defined in stdlib
-      double x = (r * M * TEAM_NO); 
-      int y = (int) x; 
-      optime[i]= abs(y); 
-#ifdef TM_DEBUG
-//   printf("\nValues of i, r, x, and y are: %d, %f, %f, %d\n", i, r, x, y);
-//  fflush(stdout);
-#endif
+      double x = (r * M);
+      int y = (int) x;
+      optime[i]= abs(y);
     }
 
 
@@ -286,43 +309,25 @@ zgt_tm::zgt_tm()
     {
       pthread_mutex_init(&mutexpool[i],NULL);
       pthread_cond_init(&condpool[i],NULL);
-      condset[i] = 0; 
-      SEQNUM[i] = 0;      
+      condset[i] = 0;
+      SEQNUM[i] = 0;
     }
-  ZGT_Nsema = MAX_TRANSACTIONS+1 ; //setting the no of semaphore 
-  
-  ZGT_Key_sem = TEAM_NO; //setting the key_t data to const 
-  
+  ZGT_Nsema = MAX_TRANSACTIONS+1 ; //setting the no of semaphore
+
+  ZGT_Key_sem = TEAM_NO; //setting the key_t data to const
+
   //semget() gets a array of semaphore for a particular key.Here
   //	creating a semaphore with  key 1
-  
-  
+
+
   if ((sem= zgt_init_sema(IPC_CREAT))<0){
     cout<< "Error creating semaphores \n";
     exit(1);
   }
-  
+
   ZGT_Semid = sem;
-  
+
   //intialising the semaphore value with 0 to 1 and the rest to 0
   zgt_init_sema_0(ZGT_Semid);
-  zgt_init_sema_rest(ZGT_Semid);  
-  
-#ifdef TM_DEBUG
-   printf("\nleaving TM initialization\n");
-   fflush(stdout);
-#endif
+  zgt_init_sema_rest(ZGT_Semid);
 };
-
- 
- 
-
-
-
-
-
-
-
-
-
-
