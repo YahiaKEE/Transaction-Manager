@@ -75,7 +75,8 @@
       /* transaction node, initializes its data members and */
       /* adds it to transaction list */
 
-      void *begintx(void *arg){
+      void *begintx(void *arg){ //!!!!needs to be changed up
+
               //Initialize a transaction object. Make sure it is
         //done after acquiring the semaphore for the tm and making sure that
         //the operation can proceed using the condition variable. when creating
@@ -114,10 +115,12 @@
       /* until the lock is released */
 
 
-      // critical section lock soon
+      // need to change up
       void *readtx(void *arg){
 
-        struct param *node = (struct param*)arg;
+        struct param *node = (struct param*)arg; // get tid and objno and count
+
+
         start_operation(node->tid, node->count);
         zgt_p(0);       // Lock Tx manager
 
@@ -153,9 +156,9 @@
         pthread_exit(NULL);
       }
 
-
+      //also need to change up
       void *writetx(void *arg){ //do the operations for writing; similar to readTx
-        struct param *node = (struct param*)arg;
+        struct param *node = (struct param*)arg; // struct parameter that contains
         start_operation(node->tid, node->count);
         zgt_p(0);       // Lock Tx manager
 
@@ -191,6 +194,7 @@
 
       }
 
+      //also need to modify
       void *aborttx(void *arg){
         struct param *node = (struct param*)arg;// get tid and count
 
@@ -206,6 +210,7 @@
         pthread_exit(NULL);			// thread exit
       }
 
+      //also need to modify
       void *committx(void *arg){
        //remove the locks before committing
         struct param *node = (struct param*)arg;// get tid and count
@@ -226,10 +231,14 @@
         pthread_exit(NULL);			// thread exit
       }
 
+      //suggestion as they are very similar
+
       // called from commit/abort with appropriate parameter to do the actual
       // operation. Make sure you give error messages if you are trying to
-      // commit/abort a non-existant tx
+      // commit/abort a non-existent tx
 
+
+      //look into this, compare w skeleton code, modify
       void *do_commit_abort(long t, char status){
 
         // Get Current Transaction to abort/commit
@@ -280,6 +289,8 @@
         }
       }
 
+
+    
       int zgt_tx::remove_tx ()
       {
         //remove the transaction from the TM
@@ -294,6 +305,8 @@
       	  }
       	  else lastr1 = txptr->nextr;			// else update prev value
          }
+
+         //check two below lines --------
         fprintf(logfile, "Trying to Remove a Tx:%d that does not exist\n", this->tid);
         fflush(logfile);
         printf("Trying to Remove a Tx:%d that does not exist\n", this->tid);
@@ -304,11 +317,10 @@
       /* this method sets lock on objno1 with lockmode1 for a tx in this*/
 
       int zgt_tx::set_lock(long tid1, long sgno1, long obno1, int count, char lockmode1) {
-
         //if the thread has to wait, block the thread on a semaphore from the
         //sempool in the transaction manager. Set the appropriate parameters in the
         //transaction list if waiting.
-        //if successful  return(0);
+        //if successful  return(0); else -1
     
         //write your code
     
@@ -402,19 +414,20 @@
     }
     
 
-      // this part frees all locks owned by the transaction
-      // Need to free the thread in the waiting queue
-      // try to obtain the lock for the freed threads
-      // if the process itself is blocked, clear the wait and semaphores
-
       int zgt_tx::free_locks()
       {
+
+        // this part frees all locks owned by the transaction
+        // that is, remove the objects from the hash table
+        // and release all Tx's waiting on this Tx
+
         zgt_hlink* temp = head;  //first obj of tx
 
-        open_logfile_for_append();
+        open_logfile_for_append(); //not in skeleton code
 
         for(temp;temp != NULL;temp = temp->nextp){	// SCAN Tx obj list
 
+            //check two below lines compare to skeleton code
             fprintf(logfile, "%d : %d \t", temp->obno, ZGT_Sh->objarray[temp->obno]->value);
             fflush(logfile);
 
@@ -430,6 +443,8 @@
       #endif
             }
           }
+
+          //check again below 2 lines compare w skeleton
         fprintf(logfile, "\n");
         fflush(logfile);
 
@@ -441,9 +456,13 @@
       // remove the transaction and free all associate dobjects. For the time being
       // this can be used for commit of the transaction.
 
-      int zgt_tx::end_tx()  //2014: not used
+      int zgt_tx::end_tx()  
       {
         zgt_tx *linktx, *prevp;
+
+        // USED to COMMIT 
+        //remove the transaction and free all associate dobjects. For the time being 
+        //this can be used for commit of the transaction.
 
         linktx = prevp = ZGT_Sh->lastr;
 
@@ -472,6 +491,7 @@
 
       }
 
+      //below is NOT in skeleton code
       // check which other transaction has the lock on the same obno
       // returns the hash node
       zgt_hlink *zgt_tx::others_lock(zgt_hlink *hnodep, long sgno1, long obno1)
@@ -561,6 +581,7 @@
 
       }
 
+      //below is NOT in the skeleton code
       // routine that sets the semno in the Tx when another tx waits on it.
       // the same number is the same as the tx number on which a Tx is waiting
       int zgt_tx::setTx_semno(long tid, int semno){
@@ -589,9 +610,7 @@
         return(0);
       }
 
-      // routine to start an operation by checking the previous operation of the same
-      // tx has completed; otherwise, it will do a conditional wait until the
-      // current thread signals a broadcast
+      
 
       void *start_operation(long tid, long count){
 
@@ -612,6 +631,7 @@
         pthread_mutex_unlock(&ZGT_Sh->mutexpool[tid]);
       }
 
+      //below is NOT in skeleton code
       void *open_logfile_for_append(){
 
         if ((logfile = fopen(ZGT_Sh->logfilename, "a")) == NULL){
