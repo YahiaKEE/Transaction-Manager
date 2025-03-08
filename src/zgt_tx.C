@@ -19,6 +19,12 @@
       #include <fstream>
       #include <pthread.h>
 
+      //PROBLEM!!
+      //skeleton code states it needs to be ..
+      //extern void *start_operation(long, long);  //start an op with mutex lock and cond wait
+      //extern void *finish_operation(long);        //finish an op with mutex unlock and con signal
+      //extern void *do_commit_abort_operation(long, char);   //commit/abort based on char value
+      //extern void *process_read_write_operation(long, long, int, char);
 
       extern void *start_operation(long, long);  //starts opeartion by doing conditional wait
       extern void *finish_operation(long);       // finishes abn operation by removing conditional wait
@@ -34,16 +40,16 @@
       /* Input: Transaction id, status, thread id */
 
       zgt_tx::zgt_tx( long tid, char Txstatus,char type, pthread_t thrid){
-        this->lockmode = (char)' ';  //default
-        this->Txtype = type; //Fall 2014[jay] R = read only, W=Read/Write
+        this->lockmode = (char)' ';   // default
+        this->Txtype = type;          // R = read only, W=Read/Write
         this->sgno =1;
         this->tid = tid;
-        this->obno = -1; //set it to a invalid value
+        this->obno = -1;              // set it to a invalid value
         this->status = Txstatus;
         this->pid = thrid;
         this->head = NULL;
         this->nextr = NULL;
-        this->semno = -1; //init to  an invalid sem value
+        this->semno = -1;             // init to an invalid sem value
       }
 
       /* Method used to obtain reference to a transaction node      */
@@ -70,34 +76,27 @@
       /* adds it to transaction list */
 
       void *begintx(void *arg){
-        //Initialize a transaction object. Make sure it is
-        //done after acquiring the semaphore for the tm and making sure that
-        //the operation can proceed using the condition variable. when creating
-        //the tx object, set the tx to TR_ACTIVE and obno to -1; there is no
-        //semno as yet as none is waiting on this tx.
-
-          struct param *node = (struct param*)arg;// get tid and count
-          start_operation(node->tid, node->count);
-
-          zgt_p(0);        // Lock Tx manager; Add node to transaction list
-
-          // Create new tx node - long tid, char Txstatus, char type, pthread_t thrid
-          zgt_tx *tx = new zgt_tx(node->tid,TR_ACTIVE, node->Txtype, pthread_self());
-
-          //Wring into the log file..
-          open_logfile_for_append();
-          fprintf(logfile, "T%d\t%c \tBeginTx\n", node->tid, node->Txtype);	// Write log record and close
-          fflush(logfile);
-
-          //Setting nextPtr to last value of ZGT_Sh(null) intially
-          tx->nextr = ZGT_Sh->lastr;
-          // Linking ZGT_Sh - TX1
-          ZGT_Sh->lastr = tx;
-
-          zgt_v(0); 			// Release tx manager
-
-        finish_operation(node->tid);
-        pthread_exit(NULL);				// thread exit
+        //intialise a transaction object. Make sure it is 
+  //done after acquiring the semaphore for the tm and making sure that 
+  //the operation can proceed using the condition variable. When creating
+  //the tx object, set the tx to TR_ACTIVE and obno to -1; there is no 
+  //semno as yet as none is waiting on this tx.
+  
+  struct param *node = (struct param*)arg;// get tid and count
+  start_operation(node->tid, node->count); 
+    zgt_tx *tx = new zgt_tx(node->tid,TR_ACTIVE, node->Txtype, pthread_self());	// Create new tx node
+ 
+    // Writes the Txtype to the file.
+  
+    zgt_p(0);				// Lock Tx manager; Add node to transaction list
+  
+    tx->nextr = ZGT_Sh->lastr;
+    ZGT_Sh->lastr = tx;   
+    zgt_v(0); 			// Release tx manager 
+  fprintf(ZGT_Sh->logfile, "T%d\t%c \tBeginTx\n", node->tid, node->Txtype);	// Write log record and close
+    fflush(ZGT_Sh->logfile);
+  finish_operation(node->tid);
+  pthread_exit(NULL);				// thread exit
 
       }
 
