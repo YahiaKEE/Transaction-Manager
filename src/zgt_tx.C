@@ -5,6 +5,8 @@
       /*** spawned by Transaction manager class.              ***/
       /**********************************************************/
 
+      /* Spring 2025: CSE 4331/5331 Project 2 : Tx Manager */
+
       /* Required header files */
       #include <stdio.h>
       #include <stdlib.h>
