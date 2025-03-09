@@ -581,7 +581,7 @@
 
       }
 
-      //below is NOT in the skeleton code
+
       // routine that sets the semno in the Tx when another tx waits on it.
       // the same number is the same as the tx number on which a Tx is waiting
       int zgt_tx::setTx_semno(long tid, int semno){
@@ -593,11 +593,8 @@
           fflush(stdout);
           return(-1);
         }
-        if (txptr->semno == -1){
-          printf("txptr->semno : %d sem:%d tid: %d\n", txptr->semno , semno, tid);
+        if ((txptr->semno == -1)|| (txptr->semno == semno)){  //just to be safe
           txptr->semno = semno;
-
-          printf("txptr->semno : %d sem:%d tid: %d\n", txptr->semno , semno, tid);
           return(0);
         }
         else if (txptr->semno != semno){
