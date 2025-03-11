@@ -210,21 +210,46 @@
       pthread_exit(NULL);
   }
 
-      //also need to modify
-      void *aborttx(void *arg){
-        struct param *node = (struct param*)arg;// get tid and count
+  void *aborttx(void *arg) {
+    struct param *node = (struct param*)arg; // Extract transaction parameters
 
-        //write your code
-        start_operation(node->tid, node->count);
-        zgt_p(0);       // Lock Tx manager
+    // Begin operation sequence, ensuring thread synchronization
+    start_operation(node->tid, node->count);
+    zgt_p(0); // Lock the transaction manager to ensure consistency
 
-        do_commit_abort_operation(node->tid,'A');
+    // Retrieve the transaction information
+    zgt_tx *txn = get_tx(node->tid);
 
-        zgt_v(0);       // Release tx manager
-
+    // Ensure the transaction exists before proceeding
+    if (!txn) {
+        fprintf(logfile, "ERROR: Transaction %ld not found. Abort operation canceled.\n", node->tid);
+        fflush(logfile);
+        zgt_v(0); // Release lock to prevent deadlock
         finish_operation(node->tid);
-        pthread_exit(NULL);			// thread exit
-      }
+        pthread_exit(NULL);
+    }
+
+    // Perform abort operation and remove the transaction from the system
+    do_commit_abort_operation(node->tid, 'A');
+
+    // Ensure locks are released if the transaction held any
+    txn->free_locks();
+
+    // Remove the transaction node from the transaction manager list
+    txn->remove_tx();
+
+    // Unlock the transaction manager before finishing
+    zgt_v(0);
+
+    // Log successful transaction abort
+    fprintf(logfile, "Transaction %ld aborted successfully.\n", node->tid);
+    fflush(logfile);
+
+    // Complete transaction cleanup and terminate thread
+    finish_operation(node->tid);
+    pthread_exit(NULL);
+}
+
 
       //also need to modify
       void *committx(void *arg){
