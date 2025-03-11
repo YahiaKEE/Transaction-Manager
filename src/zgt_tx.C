@@ -148,7 +148,7 @@
         } 
         else {
             // Log an error if the transaction doesn't exist or has been aborted
-            fprintf(logfile, "Transaction %ld not found or previously aborted. Read operation skipped.\n", node->tid);
+            fprintf(logfile, "Transaction %ld not found or previously aborted.\n", node->tid);
             fflush(logfile);
             zgt_v(0); // Ensure transaction manager lock is released
         }
@@ -160,45 +160,55 @@
     
     
 
-      //also need to change up
-      void *writetx(void *arg){ //do the operations for writing; similar to readTx
-        struct param *node = (struct param*)arg; // struct parameter that contains
-        start_operation(node->tid, node->count);
-        zgt_p(0);       // Lock Tx manager
-
-        //first get Current tx to check if same transaction holds the object lock
-        zgt_tx *currentTx = get_tx(node->tid);
-
-         if(currentTx != NULL && currentTx->status != 'A'){
-            //check if object is there in the hash table using--find (long sgno, long obno)
-            zgt_hlink *obj_ptr;
-            obj_ptr=ZGT_Ht->find(currentTx-> sgno,node->obno);
-
-            if(currentTx->status == TR_ACTIVE){//Tx is active
-              zgt_v(0);       // Release tx manager
-
-              //Check if lock can be obtained by current Txn
-              int lockFreed = currentTx->set_lock(node->tid, currentTx->sgno, node->obno, node->count, 'X');
-
-
-              // write operation
-              if(lockFreed == 1)
-                currentTx->perform_read_write_operation(currentTx-> tid, node->obno, 'X');// Exclusive Mode write
-            }
-
-        }else{
-           zgt_v(0);       // Release tx manager
-            //Transaction doesn't exist
-            fprintf(logfile, "\t Transaction %d doesn't exist or aborted. \n", node->tid); // Write log record and close
-            fflush(logfile);
-        }
-
-        finish_operation(node->tid);
-        pthread_exit(NULL);
-
+    void *writetx(void *arg) {
+      struct param *node = (struct param*)arg; // Extract transaction parameters
+  
+      // Begin transaction execution and acquire lock for controlled access
+      start_operation(node->tid, node->count);
+      zgt_p(0); // Lock transaction manager to ensure safe concurrent access
+  
+      // Fetch transaction details
+      zgt_tx *activeTransaction = get_tx(node->tid);
+  
+      // If transaction is valid and not aborted, proceed
+      if (!activeTransaction || activeTransaction->status == 'A') {
+          fprintf(logfile, "ERROR: Transaction %ld does not exist or has been aborted. Skipping write operation.\n", node->tid);
+          fflush(logfile);
+          zgt_v(0); // Release transaction manager lock before exiting
+          finish_operation(node->tid);
+          pthread_exit(NULL);
       }
-
-      
+  
+      // Retrieve object from hash table
+      zgt_hlink *objectRecord = ZGT_Ht->find(activeTransaction->sgno, node->obno);
+  
+      // Validate that the transaction is still active before proceeding
+      if (activeTransaction->status != TR_ACTIVE) {
+          zgt_v(0); // Unlock before exiting
+          finish_operation(node->tid);
+          pthread_exit(NULL);
+      }
+  
+      // Unlock transaction manager before acquiring object lock
+      zgt_v(0);
+  
+      // Attempt to obtain an exclusive lock for writing
+      bool writeLockGranted = (activeTransaction->set_lock(
+          node->tid, activeTransaction->sgno, node->obno, node->count, 'X') == 1
+      );
+  
+      // Perform the write operation if lock acquisition was successful
+      if (writeLockGranted) {
+          activeTransaction->perform_read_write_operation(activeTransaction->tid, node->obno, 'X');
+      } else {
+          fprintf(logfile, "WARNING: Transaction %ld could not obtain a lock on object %ld.\n", node->tid, node->obno);
+          fflush(logfile);
+      }
+  
+      // Complete transaction execution and terminate the thread
+      finish_operation(node->tid);
+      pthread_exit(NULL);
+  }
 
       //also need to modify
       void *aborttx(void *arg){
