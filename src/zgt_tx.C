@@ -46,14 +46,14 @@
         this->semno = -1;             // init to an invalid sem value
 
         // Open logfile if not already opened
-    if (logfile == NULL) {
+       if (logfile == NULL) {
       logfile = fopen(ZGT_Sh->logfilename, "a");
       if (logfile == NULL) {
           printf("\nERROR: Cannot open log file for append: %s\n", ZGT_Sh->logfilename);
           fflush(stdout);
           exit(1);
       }
-  }
+    }
       }
 
       /* Method used to obtain reference to a transaction node      */
@@ -93,14 +93,10 @@
     zgt_tx *tx = new zgt_tx(node->tid, TR_ACTIVE, node->Txtype, pthread_self()); // Create new tx node
 
     zgt_p(0);  // Lock Tx manager
-
     fprintf(ZGT_Sh->logfile, "T%d\t%c \tBeginTx\n", node->tid, node->Txtype);
     fflush(ZGT_Sh->logfile);
-
-    // Add transaction node to the list
     tx->nextr = ZGT_Sh->lastr;
     ZGT_Sh->lastr = tx;
-
     zgt_v(0);  // Release Tx manager
     finish_operation(node->tid);
     pthread_exit(NULL);
@@ -115,45 +111,52 @@
 
 
       // need to change up
-      void *readtx(void *arg){
-
-        struct param *node = (struct param*)arg; // get tid and objno and count
-
-
+      void *readtx(void *arg) {
+        struct param *node = (struct param*)arg; // Extract transaction parameters
+    
+        // Begin transaction operation with proper synchronization
         start_operation(node->tid, node->count);
-        zgt_p(0);       // Lock Tx manager
-
-        //first get Current tx to check if same transaction holds the object lock
-        zgt_tx *currentTx = get_tx(node->tid);
-
-        if(currentTx != NULL && currentTx->status != 'A'){
-
-          currentTx->print_tm();
-            //check if object is there in the hash table using--find (long sgno, long obno) 
-            zgt_hlink *obj_ptr;
-            obj_ptr=ZGT_Ht->find(currentTx-> sgno,node->obno);
-
-             if(currentTx->status == TR_ACTIVE){//Tx is active
-               zgt_v(0);       // Release tx manager
-              //Check if lock is obtained to read.
-              int lockFreed = currentTx->set_lock(node->tid, currentTx->sgno, node->obno, node->count, 'S');
-
-
-              //read write operation
-              if(lockFreed == 1)
-                currentTx->perform_read_write_operation(currentTx-> tid, node->obno, 'S');// Shared Mode to perform read
+        zgt_p(0); // Acquire transaction manager lock
+    
+        // Look up the transaction details
+        zgt_tx *activeTransaction = get_tx(node->tid);
+    
+        // Ensure transaction exists and is not aborted before proceeding
+        if (activeTransaction && activeTransaction->status != 'A') {
+    
+            activeTransaction->print_tm(); // Debugging output for transaction state
+    
+            // Locate the requested object in the hash table
+            zgt_hlink *objectRecord = ZGT_Ht->find(activeTransaction->sgno, node->obno);
+    
+            // Validate transaction status before attempting lock acquisition
+            if (activeTransaction->status == TR_ACTIVE) {
+                zgt_v(0); // Release transaction manager lock
+    
+                // Attempt to obtain a shared lock for reading
+                int lockAcquired = activeTransaction->set_lock(
+                    node->tid, activeTransaction->sgno, node->obno, node->count, 'S'
+                );
+    
+                // Perform the read operation if the lock was successfully acquired
+                if (lockAcquired == 1) {
+                    activeTransaction->perform_read_write_operation(
+                        activeTransaction->tid, node->obno, 'S'
+                    );
+                }
             }
-
-
-        }else{
-           zgt_v(0);       // Release tx manager
-            //Transaction doesn't exist
-            fprintf(logfile, "\t Transaction %d doesn't exist or aborted. \n", node->tid); // Write log record and close
+        } else {
+            // Transaction does not exist or was aborted, log the error
+            zgt_v(0); // Release lock to avoid deadlocks
+            fprintf(logfile, "\t Transaction %d not found or aborted.\n", node->tid);
             fflush(logfile);
         }
+    
+        // Complete transaction operation and exit the thread
         finish_operation(node->tid);
         pthread_exit(NULL);
-      }
+    }
+    
 
       //also need to change up
       void *writetx(void *arg){ //do the operations for writing; similar to readTx
