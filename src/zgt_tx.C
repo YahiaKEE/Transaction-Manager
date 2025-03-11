@@ -110,52 +110,54 @@
       /* until the lock is released */
 
 
-      // need to change up
       void *readtx(void *arg) {
         struct param *node = (struct param*)arg; // Extract transaction parameters
     
-        // Begin transaction operation with proper synchronization
+        // Begin transaction execution and ensure proper sequencing
         start_operation(node->tid, node->count);
-        zgt_p(0); // Acquire transaction manager lock
+        zgt_p(0); // Lock transaction manager to prevent race conditions
     
-        // Look up the transaction details
-        zgt_tx *activeTransaction = get_tx(node->tid);
+        // Retrieve transaction reference from the system
+        zgt_tx *activeTx = get_tx(node->tid);
     
-        // Ensure transaction exists and is not aborted before proceeding
-        if (activeTransaction && activeTransaction->status != 'A') {
+        // Validate transaction existence and ensure it hasn't been aborted
+        if (activeTx != NULL && activeTx->status != 'A') {
     
-            activeTransaction->print_tm(); // Debugging output for transaction state
+            // Print transaction details for debugging
+            activeTx->print_tm();
     
-            // Locate the requested object in the hash table
-            zgt_hlink *objectRecord = ZGT_Ht->find(activeTransaction->sgno, node->obno);
+            // Look up the associated object in the hash table
+            zgt_hlink *objectEntry = ZGT_Ht->find(activeTx->sgno, node->obno);
     
-            // Validate transaction status before attempting lock acquisition
-            if (activeTransaction->status == TR_ACTIVE) {
-                zgt_v(0); // Release transaction manager lock
+            // Ensure transaction is still in an active state before proceeding
+            if (activeTx->status == TR_ACTIVE) {
     
-                // Attempt to obtain a shared lock for reading
-                int lockAcquired = activeTransaction->set_lock(
-                    node->tid, activeTransaction->sgno, node->obno, node->count, 'S'
+                // Release transaction manager lock before attempting object lock acquisition
+                zgt_v(0);
+    
+                // Attempt to acquire a shared lock for reading
+                bool lockAcquired = (activeTx->set_lock(
+                    node->tid, activeTx->sgno, node->obno, node->count, 'S') == 1
                 );
     
-                // Perform the read operation if the lock was successfully acquired
-                if (lockAcquired == 1) {
-                    activeTransaction->perform_read_write_operation(
-                        activeTransaction->tid, node->obno, 'S'
-                    );
+                // Perform the read operation if lock acquisition was successful
+                if (lockAcquired) {
+                    activeTx->perform_read_write_operation(activeTx->tid, node->obno, 'S');
                 }
             }
-        } else {
-            // Transaction does not exist or was aborted, log the error
-            zgt_v(0); // Release lock to avoid deadlocks
-            fprintf(logfile, "\t Transaction %d not found or aborted.\n", node->tid);
+        } 
+        else {
+            // Log an error if the transaction doesn't exist or has been aborted
+            fprintf(logfile, "Transaction %ld not found or previously aborted. Read operation skipped.\n", node->tid);
             fflush(logfile);
+            zgt_v(0); // Ensure transaction manager lock is released
         }
     
-        // Complete transaction operation and exit the thread
+        // Finalize the transaction operation and terminate the thread
         finish_operation(node->tid);
         pthread_exit(NULL);
     }
+    
     
 
       //also need to change up
