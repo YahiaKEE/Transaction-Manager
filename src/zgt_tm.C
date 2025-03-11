@@ -25,11 +25,12 @@ void zgt_tm::openlog(string lfile)
 {
 //FILE *outfile;  not needed; changed to logfile for uniformity
 #ifdef TM_DEBUG
-  printf("entering openlog\n"); fflush(stdout);
+  printf("entering openlog\n");fflush(stdout);
 #endif
   this->logfilename = (char *) malloc(sizeof(char) * MAX_FILENAME);
   int i = 0;
-  while (lfile[i] != '\0') {
+  while (lfile[i] != '\0') 
+  {
     this->logfilename[i] = lfile[i];
     i++;
   }
@@ -39,13 +40,10 @@ void zgt_tm::openlog(string lfile)
 #ifdef TM_DEBUG
   printf("\nGiven log file name: %s\n", logfile; fflush(stdout);
 #endif
-
-  // Open log file using logfilename
   if ((this->logfile = fopen(logfilename, "w")) == NULL) {
     printf("\nCannot open log file for write/append: %s\n", logfilename); fflush(stdout);
     exit(1);
   }
-
   fprintf(this->logfile, "---------------------------------------------------------------\n");
   fprintf(this->logfile, "TxId\tTxtype\tOperation\tObId:Obvalue:optime\tLockType\tStatus\t\tTxStatus\n");
   fflush(this->logfile);
@@ -118,14 +116,14 @@ int zgt_tm::TxRead(long tid, long obno, int thrNum)
    return(0);   //successful operation
  }
 
-
 int zgt_tm::TxWrite(long tid, long obno, int thrNum)
  {
 	//write your code
 #ifdef TM_DEBUG
-   printf("\nentering WriteTx\n");
+   printf("\nEntering WriteTx function\n");
    fflush(stdout);
 #endif
+
   pthread_t thread1;
   struct param *nodeinfo = (struct param*)malloc(sizeof(struct param));
    nodeinfo->tid = tid;
@@ -139,9 +137,6 @@ int zgt_tm::TxWrite(long tid, long obno, int thrNum)
      printf("ERROR: return code from pthread_create() is:%d\n", status);
      exit(-1);
    }
-
-
-   //this is not in skeleton code
 #ifdef TM_DEBUG
    printf("\nleaving WriteTx\n");
    fflush(stdout);
@@ -203,14 +198,15 @@ int zgt_tm::AbortTx(long tid, int thrNum)
    printf("\nleaving AbortTx\n");
    fflush(stdout);
 #endif
-   return(0); }
+   return(0); 
+}
 
 
 int zgt_tm::endTm(int thrNum){
     int rc=0;
     int i;
 #ifdef TM_DEBUG
-   printf("\nentering End of schedule with thrNum: %d\n", thrNum);
+   printf("\nEntering End of schedule thread with thrNum: %d\n", thrNum);
    fflush(stdout);
 #endif
    printf("Wait for threads and cleanup\n");
@@ -220,6 +216,7 @@ int zgt_tm::endTm(int thrNum){
     fflush(stdout);
   }
   printf("ALL threads finished their work\n");
+  fflush(stdout);
   printf("Releasing mutexes and condpool\n");
   fflush(stdout);
   //release condpool and mutexpool
@@ -233,9 +230,10 @@ int zgt_tm::endTm(int thrNum){
   printf("endTm completed\n");
   fflush(stdout);
 #ifdef TM_DEBUG
-   printf("\nleaving endTm\n");
+   printf("\nFinished end of schedule thread: endTm\n");
    fflush(stdout);
 #endif
+    fclose(this->logfile);
    return(0); //successful operation
 
  }
@@ -247,11 +245,10 @@ int zgt_tm::endTm(int thrNum){
 //constructs the wait for graph. You can use the data structure given in ddlock.h or 
 //modify it suitably 
 
-// Currently not used
 int zgt_tm::ddlockDet()
  {
 #ifdef TM_DEBUG
-   printf("\nentering ddlockDet\n");
+   printf("\ncreating ddlockDet thread\n");
    fflush(stdout);
 #endif
 
@@ -263,18 +260,23 @@ int zgt_tm::ddlockDet()
    //exit(-1);
    //}
 #ifdef TM_DEBUG
-   printf("\nleaving ddlockDet\n");
+   printf("\nleaving ddlockDet thread create\n");
    fflush(stdout);
 #endif
    return(0);  //successful operation
  }
 
-// Currently not used
+// Not used for project 2 in Spring 2025
+
+//This routine should detect a deadlock and print the cycles involved in the deadlock to 
+//output  and log. In order to do that, spawn a thread that acquires the tm lock and 
+//constructs the wait for graph. You can use the data structure given in ddlock.h or 
+//modify it suitably
 
 int zgt_tm::chooseVictim()
  {
 #ifdef TM_DEBUG
-   printf("\nentering chooseVictim\n");
+   printf("\nentering chooseVictim thread\n");
    fflush(stdout);
 #endif
 
@@ -286,15 +288,19 @@ int zgt_tm::chooseVictim()
    //exit(-1);
    //}
 #ifdef TM_DEBUG
-   printf("\nleaving chooseVictim\n");
+   printf("\nleaving chooseVictim creating thread\n");
    fflush(stdout);
 #endif
    return(0);  //successful operation
  }
 
-
+//important; understand this
 zgt_tm::zgt_tm()
 {
+#ifdef TM_DEBUG
+  printf("\nInitializing the TM\n");
+  fflush(stdout);
+#endif
   int i,init;
 
    lastr = NULL;
@@ -348,4 +354,9 @@ zgt_tm::zgt_tm()
   //intialising the semaphore value with 0 to 1 and the rest to 0
   zgt_init_sema_0(ZGT_Semid);
   zgt_init_sema_rest(ZGT_Semid);
+
+#ifdef TM_DEBUG
+   printf("\nleaving TM initialization\n");
+   fflush(stdout);
+#endif
 };
