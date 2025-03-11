@@ -29,7 +29,7 @@
       extern void *start_operation(long, long);  //starts opeartion by doing conditional wait
       extern void *finish_operation(long);       // finishes abn operation by removing conditional wait
       extern void *open_logfile_for_append();    //opens log file for writing
-      extern void *do_commit_abort(long, char);   //commit/abort based on char value (the code is same for us)
+      extern void *do_commit_abort_operation(long, char);   //commit/abort based on char value 
 
       extern zgt_tm *ZGT_Sh;			// Transaction manager object
 
@@ -202,7 +202,7 @@
         start_operation(node->tid, node->count);
         zgt_p(0);       // Lock Tx manager
 
-        do_commit_abort(node->tid,'A');
+        do_commit_abort_operation(node->tid,'A');
 
         zgt_v(0);       // Release tx manager
 
@@ -224,7 +224,7 @@
 
         printf("Semno-> inside committx :: %d\n", currentTx->semno);
 
-        do_commit_abort(node->tid,'E');
+        do_commit_abort_operation(node->tid,'E');
 
         zgt_v(0);       // Release tx manager
         finish_operation(node->tid);
@@ -239,7 +239,7 @@
 
 
       //look into this, compare w skeleton code, modify
-      void *do_commit_abort(long t, char status){
+      void *do_commit_abort_operation(long t, char status){
 
         // Get Current Transaction to abort/commit
         zgt_tx *currentTx=get_tx(t);
