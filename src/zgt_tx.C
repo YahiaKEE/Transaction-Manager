@@ -28,8 +28,9 @@
 
       extern void *start_operation(long, long);  //starts opeartion by doing conditional wait
       extern void *finish_operation(long);       // finishes abn operation by removing conditional wait
-      extern void *open_logfile_for_append();    //opens log file for writing
       extern void *do_commit_abort_operation(long, char);   //commit/abort based on char value 
+      extern void *open_logfile_for_append();    //opens log file for writing
+      
 
       extern zgt_tm *ZGT_Sh;			// Transaction manager object
 
@@ -77,7 +78,7 @@
 
       void *begintx(void *arg){ //!!!!needs to be changed up
 
-              //Initialize a transaction object. Make sure it is
+              //initialise a transaction object. Make sure it is
         //done after acquiring the semaphore for the tm and making sure that
         //the operation can proceed using the condition variable. when creating
         //the tx object, set the tx to TR_ACTIVE and obno to -1; there is no
@@ -85,12 +86,13 @@
 
         struct param *node = (struct param*)arg;// get tid and count
         start_operation(node->tid, node->count);
+        zgt_tx *tx = new zgt_tx(node->tid,TR_ACTIVE, node->Txtype, pthread_self()); //Create the new tx node
+
+        // Writes the Txtype to the file. 
 
         zgt_p(0);        // Lock Tx manager; Add node to transaction list
 
-        // Create new tx node - long tid, char Txstatus, char type, pthread_t thrid
-        zgt_tx *tx = new zgt_tx(node->tid,TR_ACTIVE, node->Txtype, pthread_self());
-
+      
         //Wring into the log file..
         open_logfile_for_append();
         fprintf(logfile, "T%d\t%c \tBeginTx\n", node->tid, node->Txtype);	// Write log record and close
@@ -193,6 +195,8 @@
         pthread_exit(NULL);
 
       }
+
+      
 
       //also need to modify
       void *aborttx(void *arg){
