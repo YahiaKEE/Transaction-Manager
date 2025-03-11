@@ -19,17 +19,10 @@
       #include <fstream>
       #include <pthread.h>
 
-      //PROBLEM!!
-      //skeleton code states it needs to be ..
-      //extern void *start_operation(long, long);  //start an op with mutex lock and cond wait
-      //extern void *finish_operation(long);        //finish an op with mutex unlock and con signal
-      //extern void *do_commit_abort_operation(long, char);   //commit/abort based on char value
-      //extern void *process_read_write_operation(long, long, int, char);
 
       extern void *start_operation(long, long);  //starts opeartion by doing conditional wait
       extern void *finish_operation(long);       // finishes abn operation by removing conditional wait
       extern void *do_commit_abort_operation(long, char);   //commit/abort based on char value 
-      extern void *open_logfile_for_append();    //opens log file for writing
       
 
       extern zgt_tm *ZGT_Sh;			// Transaction manager object
@@ -51,6 +44,16 @@
         this->head = NULL;
         this->nextr = NULL;
         this->semno = -1;             // init to an invalid sem value
+
+        // Open logfile if not already opened
+    if (logfile == NULL) {
+      logfile = fopen(ZGT_Sh->logfilename, "a");
+      if (logfile == NULL) {
+          printf("\nERROR: Cannot open log file for append: %s\n", ZGT_Sh->logfilename);
+          fflush(stdout);
+          exit(1);
+      }
+  }
       }
 
       /* Method used to obtain reference to a transaction node      */
@@ -84,29 +87,23 @@
         //the tx object, set the tx to TR_ACTIVE and obno to -1; there is no
         //semno as yet as none is waiting on this tx.
 
-        struct param *node = (struct param*)arg;// get tid and count
-        start_operation(node->tid, node->count);
-        zgt_tx *tx = new zgt_tx(node->tid,TR_ACTIVE, node->Txtype, pthread_self()); //Create the new tx node
+        struct param *node = (struct param*)arg; // get tid and count
+    start_operation(node->tid, node->count);
 
-        // Writes the Txtype to the file. 
+    zgt_tx *tx = new zgt_tx(node->tid, TR_ACTIVE, node->Txtype, pthread_self()); // Create new tx node
 
-        zgt_p(0);        // Lock Tx manager; Add node to transaction list
+    zgt_p(0);  // Lock Tx manager
 
-      
-        //Wring into the log file..
-        open_logfile_for_append();
-        fprintf(logfile, "T%d\t%c \tBeginTx\n", node->tid, node->Txtype);	// Write log record and close
-        fflush(logfile);
+    fprintf(ZGT_Sh->logfile, "T%d\t%c \tBeginTx\n", node->tid, node->Txtype);
+    fflush(ZGT_Sh->logfile);
 
-        //Setting nextPtr to last value of ZGT_Sh(null) intially
-        tx->nextr = ZGT_Sh->lastr;
-        // Linking ZGT_Sh - TX1
-        ZGT_Sh->lastr = tx;
+    // Add transaction node to the list
+    tx->nextr = ZGT_Sh->lastr;
+    ZGT_Sh->lastr = tx;
 
-        zgt_v(0); 			// Release tx manager
-
-      finish_operation(node->tid);
-      pthread_exit(NULL);				// thread exit
+    zgt_v(0);  // Release Tx manager
+    finish_operation(node->tid);
+    pthread_exit(NULL);
       }
 
       /* Method to handle Readtx action in test file    */
@@ -427,8 +424,6 @@
 
         zgt_hlink* temp = head;  //first obj of tx
 
-        open_logfile_for_append(); //not in skeleton code
-
         for(temp;temp != NULL;temp = temp->nextp){	// SCAN Tx obj list
 
             //check two below lines compare to skeleton code
@@ -630,15 +625,4 @@
         ZGT_Sh->condset[tid]--;	// decr condset[tid] for allowing the next op
         pthread_cond_broadcast(&ZGT_Sh->condpool[tid]);// other waiting threads of same tx
         pthread_mutex_unlock(&ZGT_Sh->mutexpool[tid]);
-      }
-
-      //below is NOT in skeleton code
-      void *open_logfile_for_append(){
-
-        if ((logfile = fopen(ZGT_Sh->logfilename, "a")) == NULL){
-
-          printf("\nCannot open log file for append:%s\n", ZGT_Sh->logfile);
-          fflush(stdout);
-          exit(1);
-        }
       }
