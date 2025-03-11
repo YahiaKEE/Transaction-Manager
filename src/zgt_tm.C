@@ -120,7 +120,7 @@ int zgt_tm::TxWrite(long tid, long obno, int thrNum)
  {
 	//write your code
 #ifdef TM_DEBUG
-   printf("\nEntering WriteTx function\n");
+   printf("\nEntering WriteTx thread\n");
    fflush(stdout);
 #endif
 
@@ -138,7 +138,7 @@ int zgt_tm::TxWrite(long tid, long obno, int thrNum)
      exit(-1);
    }
 #ifdef TM_DEBUG
-   printf("\nleaving WriteTx\n");
+   printf("\nExiting WriteTx thread\n");
    fflush(stdout);
 #endif
    return(0);
@@ -148,8 +148,9 @@ int zgt_tm::CommitTx(long tid, int thrNum)
  {
 	//write your code
   #ifdef TM_DEBUG
-   printf("\nEntering CommitTx with %d\n",tid);
+   printf("\nEntering CommitTx thread - transaction id%d\n",tid);
    fflush(stdout);
+
   #endif
    pthread_t thread1;
    struct param *nodeinfo = (struct param*)malloc(sizeof(struct param));
@@ -165,9 +166,8 @@ int zgt_tm::CommitTx(long tid, int thrNum)
      exit(-1);
    }
 
-   //this is also not in skeleton code
   #ifdef TM_DEBUG
-     printf("\nleaving CommitTx\n");
+     printf("\nExiting CommitTx thread\n");
      fflush(stdout);
   #endif
    return(0);
@@ -177,8 +177,9 @@ int zgt_tm::AbortTx(long tid, int thrNum)
  {
   //write your code
   #ifdef TM_DEBUG
-   printf("\nentering AbortTx\n");
+   printf("\nEntering AbortTx thread\n");
    fflush(stdout);
+
 #endif
    pthread_t thread1;
    struct param *nodeinfo = (struct param*)malloc(sizeof(struct param));
@@ -193,9 +194,8 @@ int zgt_tm::AbortTx(long tid, int thrNum)
      exit(-1);
    }
 
-   //this is not in skeleton code below section
 #ifdef TM_DEBUG
-   printf("\nleaving AbortTx\n");
+   printf("\nExiting AbortTx thread\n");
    fflush(stdout);
 #endif
    return(0); 
