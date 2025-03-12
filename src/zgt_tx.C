@@ -251,26 +251,52 @@
 }
 
 
-      //also need to modify
-      void *committx(void *arg){
-       //remove the locks before committing
-        struct param *node = (struct param*)arg;// get tid and count
+void *committx(void *arg) {
+  struct param *node = (struct param*)arg; // Extract transaction details
 
-        //write your code
-        start_operation(node->tid, node->count);
-        zgt_p(0);       // Lock Tx manager
+  // Begin execution and ensure proper synchronization
+  start_operation(node->tid, node->count);
+  zgt_p(0); // Lock transaction manager to maintain consistency
 
-        zgt_tx *currentTx = get_tx(node->tid);
-        currentTx->status = 'E';  //Change status to END
+  // Locate the transaction in the system
+  zgt_tx *transaction = get_tx(node->tid);
 
-        printf("Semno-> inside committx :: %d\n", currentTx->semno);
+  // Check if transaction exists before proceeding
+  if (transaction == NULL) {
+      fprintf(logfile, "ERROR: Transaction %ld not found. Commit failed.\n", node->tid);
+      fflush(logfile);
+      zgt_v(0); // Unlock transaction manager before exit
+      finish_operation(node->tid);
+      pthread_exit(NULL);
+  }
 
-        do_commit_abort_operation(node->tid,'E');
+  // Update transaction status to indicate it's being committed
+  transaction->status = 'E';
 
-        zgt_v(0);       // Release tx manager
-        finish_operation(node->tid);
-        pthread_exit(NULL);			// thread exit
-      }
+  // Debug print to track commit execution
+  printf("[Commit] Transaction: %ld | Semaphore ID: %d\n", node->tid, transaction->semno);
+
+  // Process commit operation
+  do_commit_abort_operation(node->tid, 'E');
+
+  // Release any locks held by this transaction before removing it
+  transaction->free_locks();
+
+  // Remove the transaction from the system
+  transaction->remove_tx();
+
+  // Unlock transaction manager after the commit process is complete
+  zgt_v(0);
+
+  // Log successful commit operation
+  fprintf(logfile, "Transaction %ld committed successfully.\n", node->tid);
+  fflush(logfile);
+
+  // Finalize execution and terminate thread
+  finish_operation(node->tid);
+  pthread_exit(NULL);
+}
+
 
       //suggestion as they are very similar
 
@@ -350,7 +376,6 @@
          //check two below lines --------
         fprintf(logfile, "Trying to Remove a Tx:%d that does not exist\n", this->tid);
         fflush(logfile);
-        printf("Trying to Remove a Tx:%d that does not exist\n", this->tid);
         fflush(stdout);
         return(-1);
       }
