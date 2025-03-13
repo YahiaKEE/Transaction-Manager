@@ -305,56 +305,56 @@ void *committx(void *arg) {
       // commit/abort a non-existent tx
 
 
-      //look into this, compare w skeleton code, modify
-      void *do_commit_abort_operation(long t, char status){
-
-        // Get Current Transaction to abort/commit
-        zgt_tx *currentTx=get_tx(t);
-        currentTx->print_tm();
-
-        if(currentTx != NULL){
-
-          // frees all locks held on the object by current transaction
-            currentTx->free_locks();
-          //v operation on semaphore
-            zgt_v(currentTx->tid);
-          //Remove the transaction node from TM
-            int check_semno = currentTx->semno;
-            currentTx->end_tx();
-
-            //currentTx->print_tm();
-
-          /* Tell all the waiting transactions in queue about release of locks by current Txn*/
-            if(check_semno > -1){
-              int numberOfTransaction = zgt_nwait(check_semno); //No of txns waiting on the current txn
-              printf("numberOfTransaction:: %d currentTx->Semno %d \n", numberOfTransaction, check_semno);
-
-              if(numberOfTransaction > 0){
-                for (int i = 0; i < numberOfTransaction; ++i)
-                {   zgt_v(check_semno);   } //Release all semaphores of waiting txns
-
-                numberOfTransaction = zgt_nwait(check_semno); //Double check for any waiting txns
-                printf("numberOfTransaction:: %d currentTx->Semno %d \n", numberOfTransaction, check_semno);
-              }
-            }else{
-              printf("\ncheck_semno is -1\n");
-            }
-
-
-          // Commiting or Aborting the Transaction
-            if(status== 'A'){
-              fprintf(logfile, "T%d\t  \tAbortTx \t \n",t);
-            }else{
-              fprintf(logfile, "T%d\t  \tCommitTx \t \n",t);
-            }
+      void *do_commit_abort_operation(long transactionID, char actionType) {
+        // Fetch the transaction reference
+        zgt_tx *transactionRef = get_tx(transactionID);
+    
+        // If the transaction does not exist, log and exit
+        if (!transactionRef) {
+            fprintf(logfile, "[ERROR] Transaction %ld not found. %s operation failed.\n",
+                    transactionID, (actionType == 'A') ? "Abort" : "Commit");
             fflush(logfile);
-
-        }else{
-          //Transaction doesn't exist
-            fprintf(logfile, "\t Transaction %d doesn't exist. \n", t);
-            fflush(logfile);
+            return NULL;
         }
-      }
+    
+        // Log transaction details before performing any action
+        transactionRef->print_tm();
+    
+        // Unlock any held resources before proceeding
+        transactionRef->free_locks();
+    
+        // Store semaphore ID before modifying transaction state
+        int semaphoreRef = transactionRef->semno;
+    
+        // Notify all waiting transactions before removing this one
+        if (semaphoreRef > -1) {
+            int waitingCount = zgt_nwait(semaphoreRef);
+            printf("[INFO] Transaction %ld has %d transactions waiting on it.\n", 
+                    transactionID, waitingCount);
+    
+            for (int i = 0; i < waitingCount; ++i) {
+                zgt_v(semaphoreRef);
+            }
+    
+            printf("[INFO] Remaining transactions waiting after release: %d\n",
+                    zgt_nwait(semaphoreRef));
+        }
+    
+        // Final cleanup: Remove transaction from system
+        if (transactionRef->end_tx() != 0) {
+            fprintf(logfile, "[ERROR] Transaction %ld failed to terminate cleanly.\n", transactionID);
+            fflush(logfile);
+            return NULL;
+        }
+    
+        // Log transaction completion
+        fprintf(logfile, "[LOG] Transaction %ld %s successfully.\n",
+                transactionID, (actionType == 'A') ? "Aborted" : "Committed");
+        fflush(logfile);
+    
+        return NULL;
+    }
+    
 
 
     
@@ -382,102 +382,93 @@ void *committx(void *arg) {
 
       /* this method sets lock on objno1 with lockmode1 for a tx in this*/
 
-      int zgt_tx::set_lock(long tid1, long sgno1, long obno1, int count, char lockmode1) {
-        //if the thread has to wait, block the thread on a semaphore from the
-        //sempool in the transaction manager. Set the appropriate parameters in the
-        //transaction list if waiting.
-        //if successful  return(0); else -1
+      int zgt_tx::set_lock(long txnID, long segmentID, long objectID, int sequence, char lockType) {
+        bool lockAcquired = false;
     
-        //write your code
-    
-        bool lock = false;
-    
-        while (!lock) {
-            //Check the access mode --- Txtype   --- R(READ)/W(Write)
+        while (!lockAcquired) {
+            // Secure transaction manager to ensure safe lock modification
             zgt_p(0);
-            zgt_tx *currentTx = get_tx(tid1);
+            zgt_tx *currentTransaction = get_tx(txnID);
     
-            if (currentTx == NULL) {
+            // If the transaction does not exist, unlock and exit
+            if (!currentTransaction) {
                 zgt_v(0);
-                return -1;  // Transaction not found, exit early
+                return -1;  // Exit with failure
             }
     
-            zgt_hlink *obj_ptr = ZGT_Ht->find(currentTx->sgno, obno1); // Declare and initialize obj_ptr
+            // Attempt to locate the object in the transaction system
+            zgt_hlink *objectReference = ZGT_Ht->find(currentTransaction->sgno, objectID);
     
-            if (obj_ptr == NULL) {
-                //Object is not present in the Hash table, we could insert it and grant the lock
-                ZGT_Ht->add(currentTx, currentTx->sgno, obno1, currentTx->lockmode);
+            if (!objectReference) {
+                // If object isn't in hash table, add it and grant lock
+                ZGT_Ht->add(currentTransaction, currentTransaction->sgno, objectID, currentTransaction->lockmode);
+                currentTransaction->status = 'P';  // Mark transaction as active
+                zgt_v(0); // Unlock transaction manager
+                return 1; // Lock acquired successfully
+            }
     
-                currentTx->status = 'P';  //Set txn to ACTIVE
-                //currentTx->semno = -1;
-                zgt_v(0);       // Release tx manager
-                return(1);
+            // Check if the current transaction already holds the lock
+            if (objectReference->tid == txnID) {
+                currentTransaction->status = 'P';  // Keep transaction active
+                zgt_v(0);
+                return 1;  // Lock retained successfully
+            }
     
-            } else {
-                //Current transaction already has the lock and is trying to access the object
-                if (obj_ptr->tid == tid1) {
-                    currentTx->status = 'P';
-                    //currentTx->semno = -1;
+            // Determine the status of the transaction currently holding the object
+            zgt_tx *existingTransaction = get_tx(objectReference->tid);
+            zgt_hlink *pendingTransaction = others_lock(objectReference, segmentID, objectID);
+    
+            if (currentTransaction->Txtype == 'R' && existingTransaction->Txtype == 'R' && pendingTransaction->lockmode != 'X') {
+                // Grant shared read access if no conflicting write requests
+                lockAcquired = true;
+    
+                if (!currentTransaction->head) {
+                    // If transaction has no object references, link it to the object in the hash table
+                    ZGT_Ht->add(currentTransaction, currentTransaction->sgno, objectID, currentTransaction->lockmode);
+                    objectReference = ZGT_Ht->find(currentTransaction->sgno, objectID);
+                    currentTransaction->head = objectReference;
+                    currentTransaction->status = 'P';
                     zgt_v(0);
-                    return(1);
+                    return 1;
                 } else {
-                    zgt_tx *secondaryTx = get_tx(obj_ptr->tid);  //Txn holding the object
-                    zgt_hlink *otherTx = others_lock(obj_ptr, sgno1, obno1);  //Other txns wanting the object.
-    
-                    if (currentTx->Txtype == 'R' && secondaryTx->Txtype == 'R' && otherTx->lockmode != 'X') {
-                        //Check if current txn and txn holding object have shared read.
-                        //Also check if any other txn is waiting on the object for a write. This takes care that txn doesnt unfairly wait.
-                        lock = true;  //Lock granted
-    
-                        if (currentTx->head == NULL) {
-                            //Add current transaction to object in hash table, as it has no pointers to hash table
-                            ZGT_Ht->add(currentTx, currentTx->sgno, obno1, currentTx->lockmode);
-                            obj_ptr = ZGT_Ht->find(currentTx->sgno, obno1);
-                            //printf("In here new obj head\n");
-                            currentTx->head = obj_ptr;            //Point the head to this object node
-                            currentTx->status = 'P';
-                            //currentTx->semno = -1;
-                            zgt_v(0);
-                            return(1);
-                        } else {
-                            //iterate to the end of object list to add new required object node at the end
-                            zgt_hlink *temp = currentTx->head;
-                            while (temp->nextp != NULL) {
-                                temp = temp->nextp;
-                            }
-                            temp->nextp = obj_ptr;               // Point the nextp of last object node to the new node
-    
-                            currentTx->status = 'P';
-                            //currentTx->semno = -1;
-                            zgt_v(0);
-                            return(1);
-                        }
-                    } else {
-                        //If one of the transactions is not in shared mode
-                        currentTx->status = 'W';         //Make status of current txn as WAIT
-                        currentTx->obno = obno1;
-                        currentTx->lockmode = lockmode1;
-    
-                        if (get_tx(obj_ptr->tid)) {
-                            currentTx->setTx_semno(obj_ptr->tid, obj_ptr->tid); //Set semaphore on current tx
-                            // so that txn holding object knows a new txn is waiting for the object.
-                        } else {
-                            //In case txn holding object ceases, grant lock.
-                            currentTx->status = 'P';
-                            zgt_v(0);
-                            return(1);
-                        }
-    
-                        printf("Tx %ld is waiting on:T%ld\n", currentTx->tid, obj_ptr->tid);
-                        currentTx->print_tm();
-                        zgt_v(0);
-                        zgt_p(obj_ptr->tid); //Hold txn with the object.
-                        lock = false;
+                    // Append the object reference to the transaction's existing object list
+                    zgt_hlink *iterator = currentTransaction->head;
+                    while (iterator->nextp) {
+                        iterator = iterator->nextp;
                     }
+                    iterator->nextp = objectReference; // Extend linked list of locked objects
+    
+                    currentTransaction->status = 'P';
+                    zgt_v(0);
+                    return 1;
                 }
+            } else {
+                // If the transaction must wait, update its status and set up waiting conditions
+                currentTransaction->status = 'W';  
+                currentTransaction->obno = objectID;
+                currentTransaction->lockmode = lockType;
+    
+                if (get_tx(objectReference->tid)) {
+                    currentTransaction->setTx_semno(objectReference->tid, objectReference->tid);
+                } else {
+                    // If the existing transaction no longer holds the lock, grant it immediately
+                    currentTransaction->status = 'P';
+                    zgt_v(0);
+                    return 1;
+                }
+    
+                // Log waiting transactions
+                printf("[INFO] Transaction %ld is waiting on Transaction %ld for object %ld\n",
+                       currentTransaction->tid, objectReference->tid, objectID);
+    
+                currentTransaction->print_tm();
+                zgt_v(0);
+                zgt_p(objectReference->tid); // Block transaction until lock is available
+                lockAcquired = false;
             }
         }
     }
+    
     
 
       int zgt_tx::free_locks()
@@ -613,37 +604,52 @@ void *committx(void *arg) {
 
       // routine to perform the acutual read/write operation
       // based  on the lockmode
-      void zgt_tx::perform_read_write_operation(long tid,long obno, char lockmode){
-
-        // write your code
-       // write your code
-         zgt_p(0);        // Lock Tx manager;
-         zgt_tx *txptr=get_tx(tid);
-         int i;
-         if(lockmode == 'S'){  //Read only mode
-          //While read decrement object value by 1 for read
-        ZGT_Sh->objarray[obno]->value--;
-
-          //Write to log file
-          fprintf(logfile, "T%d\t  \tReadTx \t\t %d:%d:%d  \t\t ReadLock \t Granted \t%c\n",tid,obno,ZGT_Sh->objarray[obno]->value,ZGT_Sh->optime[tid],txptr->status);  // Write log record and close
-          fflush(logfile);
-          zgt_v(0);       // Release tx manager
+      void zgt_tx::perform_read_write_operation(long txnID, long objectID, char mode) {
+        // Secure transaction manager lock before proceeding
+        zgt_p(0);
+    
+        // Retrieve the transaction from the system
+        zgt_tx *activeTxn = get_tx(txnID);
+    
+        // Validate that the transaction exists before proceeding
+        if (!activeTxn) {
+            fprintf(logfile, "[ERROR] Transaction %ld not found! Read/Write operation failed.\n", txnID);
+            fflush(logfile);
+            zgt_v(0);  // Unlock transaction manager
+            return;
         }
-         else if(lockmode == 'X'){ //Read-Write mode
-         //While writing increment object value by 1
-          ZGT_Sh->objarray[obno]->value++;
-
-          //Write to log file
-          fprintf(logfile, "T%d\t  \tWriteTx \t %d:%d:%d  \t\t WriteLock \t Granted \t%c\n",tid,obno,ZGT_Sh->objarray[obno]->value,ZGT_Sh->optime[tid],txptr->status);  // Write log record and close
-          fflush(logfile);
-          zgt_v(0);       // Release tx manager
+    
+        // Retrieve the object reference
+        int previousValue = ZGT_Sh->objarray[objectID]->value;
+    
+        // Handle different lock modes
+        switch (mode) {
+            case 'S': // Shared Read Lock
+                ZGT_Sh->objarray[objectID]->value--;  // Simulate read by decrementing value
+                fprintf(logfile, "T%ld\t  \tReadTx \t\t %ld:%d:%d  \t\t ReadLock \t Granted \t%c\n",
+                        txnID, objectID, previousValue - 1, ZGT_Sh->optime[txnID], activeTxn->status);
+                fflush(logfile);
+                break;
+    
+            case 'X': // Exclusive Write Lock
+                ZGT_Sh->objarray[objectID]->value++;  // Simulate write by incrementing value
+                fprintf(logfile, "T%ld\t  \tWriteTx \t %ld:%d:%d  \t\t WriteLock \t Granted \t%c\n",
+                        txnID, objectID, previousValue + 1, ZGT_Sh->optime[txnID], activeTxn->status);
+                fflush(logfile);
+                break;
+    
+            default:
+                fprintf(stderr, "[ERROR] Invalid lock mode '%c' for transaction %ld on object %ld\n", mode, txnID, objectID);
+                fprintf(logfile, "[ERROR] Invalid lock mode '%c' for transaction %ld on object %ld\n", mode, txnID, objectID);
+                fflush(stderr);
+                fflush(logfile);
+                break;
         }
-         else {
-           printf("\n Error no lockmode set for tx \n");
-           zgt_v(0);      // Release tx manager
-        }
-
-      }
+    
+        // Unlock transaction manager after operation completes
+        zgt_v(0);
+    }
+    
 
 
       // routine that sets the semno in the Tx when another tx waits on it.
