@@ -113,50 +113,51 @@
       void *readtx(void *arg) {
         struct param *node = (struct param*)arg; // Extract transaction parameters
     
-        // Begin transaction execution and ensure proper sequencing
+        // Start transaction operation, ensuring proper execution order
         start_operation(node->tid, node->count);
         zgt_p(0); // Lock transaction manager to prevent race conditions
     
-        // Retrieve transaction reference from the system
+        // Retrieve the transaction reference
         zgt_tx *activeTx = get_tx(node->tid);
     
-        // Validate transaction existence and ensure it hasn't been aborted
-        if (activeTx != NULL && activeTx->status != 'A') {
-    
-            // Print transaction details for debugging
-            activeTx->print_tm();
-    
-            // Look up the associated object in the hash table
-            zgt_hlink *objectEntry = ZGT_Ht->find(activeTx->sgno, node->obno);
-    
-            // Ensure transaction is still in an active state before proceeding
-            if (activeTx->status == TR_ACTIVE) {
-    
-                // Release transaction manager lock before attempting object lock acquisition
-                zgt_v(0);
-    
-                // Attempt to acquire a shared lock for reading
-                bool lockAcquired = (activeTx->set_lock(
-                    node->tid, activeTx->sgno, node->obno, node->count, 'S') == 1
-                );
-    
-                // Perform the read operation if lock acquisition was successful
-                if (lockAcquired) {
-                    activeTx->perform_read_write_operation(activeTx->tid, node->obno, 'S');
-                }
-            }
-        } 
-        else {
-            // Log an error if the transaction doesn't exist or has been aborted
-            fprintf(logfile, "Transaction %ld not found or previously aborted.\n", node->tid);
+        // If the transaction is invalid or has been aborted, log an error and exit
+        if (!activeTx || activeTx->status == 'A') {
+            fprintf(logfile, "[ERROR] Transaction %ld not found or aborted. Read operation failed.\n", node->tid);
             fflush(logfile);
-            zgt_v(0); // Ensure transaction manager lock is released
+            zgt_v(0); // Release transaction manager lock
+            finish_operation(node->tid);
+            pthread_exit(NULL);
+        }
+    
+        // Ensure the transaction is active before proceeding
+        if (activeTx->status != TR_ACTIVE) {
+            fprintf(logfile, "[WARNING] Transaction %ld is not active. Read operation skipped.\n", node->tid);
+            fflush(logfile);
+            zgt_v(0);
+            finish_operation(node->tid);
+            pthread_exit(NULL);
+        }
+    
+        // Release transaction manager lock before attempting lock acquisition
+        zgt_v(0);
+    
+        // Attempt to acquire a shared lock for reading
+        bool lockAcquired = (activeTx->set_lock(node->tid, activeTx->sgno, node->obno, node->count, 'S') == 1);
+    
+        if (lockAcquired) {
+            // Perform the read operation only if the lock was successfully acquired
+            activeTx->perform_read_write_operation(activeTx->tid, node->obno, 'S');
+        } else {
+            // Log failure to acquire lock
+            fprintf(logfile, "[WARNING] Transaction %ld failed to acquire a shared lock on object %ld.\n", node->tid, node->obno);
+            fflush(logfile);
         }
     
         // Finalize the transaction operation and terminate the thread
         finish_operation(node->tid);
         pthread_exit(NULL);
     }
+    
     
     
 
@@ -306,10 +307,8 @@ void *committx(void *arg) {
 
 
       void *do_commit_abort_operation(long transactionID, char actionType) {
-        // Fetch the transaction reference
         zgt_tx *transactionRef = get_tx(transactionID);
     
-        // If the transaction does not exist, log and exit
         if (!transactionRef) {
             fprintf(logfile, "[ERROR] Transaction %ld not found. %s operation failed.\n",
                     transactionID, (actionType == 'A') ? "Abort" : "Commit");
@@ -317,43 +316,30 @@ void *committx(void *arg) {
             return NULL;
         }
     
-        // Log transaction details before performing any action
-        transactionRef->print_tm();
-    
-        // Unlock any held resources before proceeding
+        // Unlock resources before modifying state
         transactionRef->free_locks();
     
-        // Store semaphore ID before modifying transaction state
         int semaphoreRef = transactionRef->semno;
     
-        // Notify all waiting transactions before removing this one
         if (semaphoreRef > -1) {
             int waitingCount = zgt_nwait(semaphoreRef);
-            printf("[INFO] Transaction %ld has %d transactions waiting on it.\n", 
-                    transactionID, waitingCount);
-    
             for (int i = 0; i < waitingCount; ++i) {
                 zgt_v(semaphoreRef);
             }
-    
-            printf("[INFO] Remaining transactions waiting after release: %d\n",
-                    zgt_nwait(semaphoreRef));
         }
     
-        // Final cleanup: Remove transaction from system
         if (transactionRef->end_tx() != 0) {
             fprintf(logfile, "[ERROR] Transaction %ld failed to terminate cleanly.\n", transactionID);
             fflush(logfile);
             return NULL;
         }
     
-        // Log transaction completion
         fprintf(logfile, "[LOG] Transaction %ld %s successfully.\n",
                 transactionID, (actionType == 'A') ? "Aborted" : "Committed");
         fflush(logfile);
     
         return NULL;
-    }
+    }    
     
 
 
@@ -386,64 +372,62 @@ void *committx(void *arg) {
         bool lockAcquired = false;
     
         while (!lockAcquired) {
-            // Secure transaction manager to ensure safe lock modification
+            // Secure transaction manager for safe lock modification
             zgt_p(0);
             zgt_tx *currentTransaction = get_tx(txnID);
     
-            // If the transaction does not exist, unlock and exit
+            // Validate transaction existence before proceeding
             if (!currentTransaction) {
+                fprintf(logfile, "[ERROR] Transaction %ld not found. Lock acquisition failed.\n", txnID);
+                fflush(logfile);
                 zgt_v(0);
                 return -1;  // Exit with failure
             }
     
-            // Attempt to locate the object in the transaction system
+            // Locate object in hash table
             zgt_hlink *objectReference = ZGT_Ht->find(currentTransaction->sgno, objectID);
     
             if (!objectReference) {
-                // If object isn't in hash table, add it and grant lock
+                // Grant new lock since object is not held by anyone
                 ZGT_Ht->add(currentTransaction, currentTransaction->sgno, objectID, currentTransaction->lockmode);
-                currentTransaction->status = 'P';  // Mark transaction as active
-                zgt_v(0); // Unlock transaction manager
-                return 1; // Lock acquired successfully
+                currentTransaction->status = 'P';  
+                zgt_v(0);
+                return 1;
             }
     
-            // Check if the current transaction already holds the lock
+            // Check if transaction already holds the lock
             if (objectReference->tid == txnID) {
-                currentTransaction->status = 'P';  // Keep transaction active
+                currentTransaction->status = 'P';  
                 zgt_v(0);
-                return 1;  // Lock retained successfully
+                return 1;
             }
     
             // Determine the status of the transaction currently holding the object
             zgt_tx *existingTransaction = get_tx(objectReference->tid);
             zgt_hlink *pendingTransaction = others_lock(objectReference, segmentID, objectID);
     
+            // Shared read access case
             if (currentTransaction->Txtype == 'R' && existingTransaction->Txtype == 'R' && pendingTransaction->lockmode != 'X') {
-                // Grant shared read access if no conflicting write requests
                 lockAcquired = true;
     
+                // Assign lock and update linked list properly
                 if (!currentTransaction->head) {
-                    // If transaction has no object references, link it to the object in the hash table
                     ZGT_Ht->add(currentTransaction, currentTransaction->sgno, objectID, currentTransaction->lockmode);
                     objectReference = ZGT_Ht->find(currentTransaction->sgno, objectID);
                     currentTransaction->head = objectReference;
-                    currentTransaction->status = 'P';
-                    zgt_v(0);
-                    return 1;
                 } else {
-                    // Append the object reference to the transaction's existing object list
                     zgt_hlink *iterator = currentTransaction->head;
                     while (iterator->nextp) {
                         iterator = iterator->nextp;
                     }
-                    iterator->nextp = objectReference; // Extend linked list of locked objects
-    
-                    currentTransaction->status = 'P';
-                    zgt_v(0);
-                    return 1;
+                    iterator->nextp = objectReference;
                 }
+    
+                currentTransaction->status = 'P';
+                zgt_v(0);
+                return 1;
             } else {
-                // If the transaction must wait, update its status and set up waiting conditions
+                // Transaction must wait
                 currentTransaction->status = 'W';  
                 currentTransaction->obno = objectID;
                 currentTransaction->lockmode = lockType;
@@ -451,23 +435,23 @@ void *committx(void *arg) {
                 if (get_tx(objectReference->tid)) {
                     currentTransaction->setTx_semno(objectReference->tid, objectReference->tid);
                 } else {
-                    // If the existing transaction no longer holds the lock, grant it immediately
                     currentTransaction->status = 'P';
                     zgt_v(0);
                     return 1;
                 }
     
-                // Log waiting transactions
-                printf("[INFO] Transaction %ld is waiting on Transaction %ld for object %ld\n",
-                       currentTransaction->tid, objectReference->tid, objectID);
+                fprintf(logfile, "[INFO] Transaction %ld is waiting on Transaction %ld for object %ld.\n",
+                        currentTransaction->tid, objectReference->tid, objectID);
+                fflush(logfile);
     
-                currentTransaction->print_tm();
                 zgt_v(0);
-                zgt_p(objectReference->tid); // Block transaction until lock is available
+                zgt_p(objectReference->tid);
                 lockAcquired = false;
             }
         }
     }
+    
+    
     
     
 
@@ -605,50 +589,60 @@ void *committx(void *arg) {
       // routine to perform the acutual read/write operation
       // based  on the lockmode
       void zgt_tx::perform_read_write_operation(long txnID, long objectID, char mode) {
-        // Secure transaction manager lock before proceeding
         zgt_p(0);
     
-        // Retrieve the transaction from the system
         zgt_tx *activeTxn = get_tx(txnID);
     
-        // Validate that the transaction exists before proceeding
         if (!activeTxn) {
-            fprintf(logfile, "[ERROR] Transaction %ld not found! Read/Write operation failed.\n", txnID);
+            fprintf(logfile, "[ERROR] Transaction %ld not found! Read/Write operation aborted.\n", txnID);
             fflush(logfile);
-            zgt_v(0);  // Unlock transaction manager
+            zgt_v(0);
             return;
         }
     
-        // Retrieve the object reference
+        if (!ZGT_Sh->objarray[objectID]) {
+            fprintf(logfile, "[ERROR] Object %ld does not exist! Transaction %ld cannot proceed.\n", objectID, txnID);
+            fflush(logfile);
+            zgt_v(0);
+            return;
+        }
+    
         int previousValue = ZGT_Sh->objarray[objectID]->value;
     
-        // Handle different lock modes
+        if (activeTxn->status != TR_ACTIVE) {
+            fprintf(logfile, "[WARNING] Transaction %ld is not active! Skipping operation.\n", txnID);
+            fflush(logfile);
+            zgt_v(0);
+            return;
+        }
+    
         switch (mode) {
-            case 'S': // Shared Read Lock
-                ZGT_Sh->objarray[objectID]->value--;  // Simulate read by decrementing value
+            case 'S':
+                ZGT_Sh->objarray[objectID]->value--;
                 fprintf(logfile, "T%ld\t  \tReadTx \t\t %ld:%d:%d  \t\t ReadLock \t Granted \t%c\n",
                         txnID, objectID, previousValue - 1, ZGT_Sh->optime[txnID], activeTxn->status);
                 fflush(logfile);
                 break;
     
-            case 'X': // Exclusive Write Lock
-                ZGT_Sh->objarray[objectID]->value++;  // Simulate write by incrementing value
+            case 'X':
+                ZGT_Sh->objarray[objectID]->value++;
                 fprintf(logfile, "T%ld\t  \tWriteTx \t %ld:%d:%d  \t\t WriteLock \t Granted \t%c\n",
                         txnID, objectID, previousValue + 1, ZGT_Sh->optime[txnID], activeTxn->status);
                 fflush(logfile);
                 break;
     
             default:
-                fprintf(stderr, "[ERROR] Invalid lock mode '%c' for transaction %ld on object %ld\n", mode, txnID, objectID);
-                fprintf(logfile, "[ERROR] Invalid lock mode '%c' for transaction %ld on object %ld\n", mode, txnID, objectID);
+                fprintf(stderr, "[ERROR] Invalid lock mode '%c' for transaction %ld on object %ld.\n", mode, txnID, objectID);
+                fprintf(logfile, "[ERROR] Invalid lock mode '%c' for transaction %ld on object %ld.\n", mode, txnID, objectID);
                 fflush(stderr);
                 fflush(logfile);
                 break;
         }
     
-        // Unlock transaction manager after operation completes
         zgt_v(0);
     }
+    
+    
     
 
 
