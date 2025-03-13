@@ -345,9 +345,6 @@ void *committx(void *arg) {
         return NULL;
     }    
     
-
-
-    
       int zgt_tx::remove_tx ()
       {
         //remove the transaction from the TM
@@ -355,7 +352,7 @@ void *committx(void *arg) {
         zgt_tx *txptr, *lastr1;
         lastr1 = ZGT_Sh->lastr;
         for(txptr = ZGT_Sh->lastr; txptr != NULL; txptr = txptr->nextr){	// scan through list
-      	  if (txptr->tid == this->tid){		// if req node is found
+      	  if (txptr->tid == this->tid){		// if correct node is found  
       		 lastr1->nextr = txptr->nextr;	// update nextr value; done
       		 //delete this;
                return(0);
@@ -364,8 +361,9 @@ void *committx(void *arg) {
          }
 
          //check two below lines --------
-        fprintf(logfile, "Trying to Remove a Tx:%d that does not exist\n", this->tid);
-        fflush(logfile);
+        fprintf(ZGT_Sh->logfile, "Trying to Remove a Tx:%d that does not exist\n", this->tid);
+        fflush(ZGT_Sh->logfile);
+        printf("Trying to Remove a Tx:%d that does not exist\n", this->tid);
         fflush(stdout);
         return(-1);
       }
