@@ -7,6 +7,8 @@
 
       /* Spring 2025: CSE 4331/5331 Project 2 : Tx Manager */
 
+      //3/13/25 12:21 AM
+
       /* Required header files */
       #include <stdio.h>
       #include <stdlib.h>
@@ -23,11 +25,10 @@
       extern void *start_operation(long, long);  //starts opeartion by doing conditional wait
       extern void *finish_operation(long);       // finishes abn operation by removing conditional wait
       extern void *do_commit_abort_operation(long, char);   //commit/abort based on char value 
-      
+      //extern void *process_read_write_operation(long, long, int, char); //did not use
 
       extern zgt_tm *ZGT_Sh;			// Transaction manager object
-
-      FILE *logfile; //declare globally to be used by all
+      FILE *logfile; //Global variable
 
       /* Transaction class constructor */
       /* Initializes transaction id and status and thread id */
@@ -46,14 +47,15 @@
         this->semno = -1;             // init to an invalid sem value
 
         // Open logfile if not already opened
-       if (logfile == NULL) {
+       if (logfile == NULL) 
+       {
       logfile = fopen(ZGT_Sh->logfilename, "a");
       if (logfile == NULL) {
           printf("\nERROR: Cannot open log file for append: %s\n", ZGT_Sh->logfilename);
           fflush(stdout);
           exit(1);
       }
-    }
+       }
       }
 
       /* Method used to obtain reference to a transaction node      */
@@ -79,9 +81,9 @@
       /* transaction node, initializes its data members and */
       /* adds it to transaction list */
 
-      void *begintx(void *arg){ //!!!!needs to be changed up
+      void *begintx(void *arg){ 
 
-              //initialise a transaction object. Make sure it is
+        //initialise a transaction object. Make sure it is
         //done after acquiring the semaphore for the tm and making sure that
         //the operation can proceed using the condition variable. when creating
         //the tx object, set the tx to TR_ACTIVE and obno to -1; there is no
@@ -92,14 +94,16 @@
 
     zgt_tx *tx = new zgt_tx(node->tid, TR_ACTIVE, node->Txtype, pthread_self()); // Create new tx node
 
-    zgt_p(0);  // Lock Tx manager
+        // Writes the Txtype to the file.
+
+    zgt_p(0);  // Lock Tx manager; Add node to transaction list
     fprintf(ZGT_Sh->logfile, "T%d\t%c \tBeginTx\n", node->tid, node->Txtype);
     fflush(ZGT_Sh->logfile);
     tx->nextr = ZGT_Sh->lastr;
     ZGT_Sh->lastr = tx;
-    zgt_v(0);  // Release Tx manager
+    zgt_v(0); 			// Release tx manager 
     finish_operation(node->tid);
-    pthread_exit(NULL);
+    pthread_exit(NULL);				// thread exit
       }
 
       /* Method to handle Readtx action in test file    */
